@@ -1,0 +1,20 @@
+# Keil build output
+OBJ/
+Objects/
+Listings/
+
+*.o
+*.d
+*.crf
+*.axf
+*.hex
+*.bin
+*.elf
+*.map
+*.lnp
+*.lst
+*.dep
+*.htm
+*.sct
+*.Bak
+
