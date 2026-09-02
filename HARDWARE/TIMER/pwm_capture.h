@@ -4,37 +4,38 @@
 #include "sys.h"
 #include "stm32f4xx_hal.h"
 
-// 8Â·×ÜÍ¨µÀ£¨TIM8 4Â· + TIM5 4Â·£©
+// 8è·¯æ€»é€šé“ï¼ˆTIM8 4è·¯ + TIM5 4è·¯ï¼‰
 typedef enum
 {
-    // TIM8 Í¨µÀ ¡ú µç»ú×ªËÙ
-    MOTOR_CH0 = 0,  // TIM8_CH1 ¡ú PI5
-    MOTOR_CH1 = 1,  // TIM8_CH2 ¡ú PI6
-    MOTOR_CH2 = 2,  // TIM8_CH3 ¡ú PI7
-    MOTOR_CH3 = 3,  // TIM8_CH4 ¡ú PI2
+    // TIM8 é€šé“ â†’ ç”µæœºè½¬é€Ÿ
+    MOTOR_CH0 = 0,  // TIM8_CH1 â†’ PI5
+    MOTOR_CH1 = 1,  // TIM8_CH2 â†’ PI6
+    MOTOR_CH2 = 2,  // TIM8_CH3 â†’ PI7
+    MOTOR_CH3 = 3,  // TIM8_CH4 â†’ PI2
 
-    // TIM5 Í¨µÀ ¡ú ÊÖ±úÊäÈë
-    HAND_CH0  = 4,  // TIM5_CH1 ¡ú PH10
-    HAND_CH1  = 5,  // TIM5_CH2 ¡ú PH11
-    HAND_CH2  = 6,  // TIM5_CH3 ¡ú PH12
-    HAND_CH3  = 7,  // TIM5_CH4 ¡ú PI0
+    // TIM5 é€šé“ â†’ æ‰‹æŸ„è¾“å…¥
+    HAND_CH0  = 4,  // TIM5_CH1 â†’ PH10
+    HAND_CH1  = 5,  // TIM5_CH2 â†’ PH11
+    HAND_CH2  = 6,  // TIM5_CH3 â†’ PH12
+    HAND_CH3  = 7,  // TIM5_CH4 â†’ PI0
 
     CAP_MAX
 } CAP_CH_E;
 
-// ²¶»ñÊý¾Ý½á¹¹Ìå
+// æ•èŽ·æ•°æ®ç»“æž„ä½“
 typedef struct
 {
     uint8_t  cap_ok;
     uint32_t period_us;
     uint32_t high_us;
+    uint32_t last_capture_ms;
 } CAP_Data_t;
 
-// Á½×é¶ÀÁ¢Êý¾Ý
-extern CAP_Data_t Motor_Data[4];  // µç»ú×ªËÙ£¨TIM8 4Â·£©
-extern CAP_Data_t Hand_Data[4];   // ÊÖ±úÊäÈë£¨TIM5 4Â·£©
+// ä¸¤ç»„ç‹¬ç«‹æ•°æ®
+extern CAP_Data_t Motor_Data[4];  // ç”µæœºè½¬é€Ÿï¼ˆTIM8 4è·¯ï¼‰
+extern CAP_Data_t Hand_Data[4];   // æ‰‹æŸ„è¾“å…¥ï¼ˆTIM5 4è·¯ï¼‰
 
-// ³õÊ¼»¯È«²¿8Â·
+// åˆå§‹åŒ–å…¨éƒ¨8è·¯
 void PWM_CAP_Init_All(void);
 
 #endif

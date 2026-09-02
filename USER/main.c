@@ -7,6 +7,9 @@
 #include "pwm_capture.h"
 #include "key.h"
 
+#define MOTOR_POLE_COUNT        14U
+#define MOTOR_SIGNAL_TIMEOUT_MS 100U
+
 MotorData_t tx_data;
 uint16_t duty_angle[4];
 uint32_t duty_speed[4];
@@ -16,6 +19,26 @@ int i;
 uint16_t PWM_val1_Inital = 495+52;   // 舵机起始位置
 uint16_t PWM_val2_Inital = 1500;  // 电机起始位置
 uint8_t ctrl_mode = 1;   // 0:手柄模式(默认)  1:上位机串口模式
+
+static uint16_t Motor_GetSpeedRPM(uint8_t motor_index)
+{
+    uint32_t period_us;
+
+    if(motor_index >= 4U)
+        return 0U;
+
+    if((Motor_Data[motor_index].cap_ok == 0U) ||
+       ((HAL_GetTick() - Motor_Data[motor_index].last_capture_ms) > MOTOR_SIGNAL_TIMEOUT_MS))
+        return 0U;
+
+    period_us = Motor_Data[motor_index].period_us;
+    if(period_us == 0U)
+        return 0U;
+
+    // RPM = 频率 * 120 / 磁极数；先合并常数以减少整数截断误差
+    return (uint16_t)((1000000UL * 120UL) /
+                      (period_us * MOTOR_POLE_COUNT));
+}
 
 int main(void)
 {
@@ -105,7 +128,7 @@ int main(void)
 
                 for(i = 0; i < 4; i++) //填充电机周期值
                 {
-                   tx_data.wheel_speed[i] = (1000000 / Motor_Data[i].period_us) * 120 / 14;
+                   tx_data.wheel_speed[i] = Motor_GetSpeedRPM(i);
                    tx_data.steer_angle[i] = ((uint32_t)(rx_data.steer_angle[i] - 165) * 180UL) / 660-90;
                   
                 }
@@ -133,7 +156,7 @@ int main(void)
         // // -------------- 手柄数据打包上传上位机 ------------------//
         for(i = 0; i < 4; i++) //填充电机周期值
         {
-          tx_data.wheel_speed[i] = (1000000 / Motor_Data[i].period_us) * 120 / 14;
+          tx_data.wheel_speed[i] = Motor_GetSpeedRPM(i);
           tx_data.steer_angle[i] =  ((uint32_t)(Duty_Steer - 165) * 180UL) / 660-90;
         }       
 //        printf("freq_val=%d\r\n", 2*target2); 

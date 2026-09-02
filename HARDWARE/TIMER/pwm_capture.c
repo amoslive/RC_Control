@@ -1,37 +1,37 @@
 #include "pwm_capture.h"
 
-// TIM8 + TIM5 Á½¸ö¶¨Ê±Æ÷
+// TIM8 + TIM5 ä¸¤ä¸ªå®šæ—¶å™¨
 TIM_HandleTypeDef htim8;
 TIM_HandleTypeDef htim5;
 
-// Á½×é¶ÀÁ¢Êı¾İ
-CAP_Data_t Motor_Data[4] = {0};  // µç»ú×ªËÙ
-CAP_Data_t Hand_Data[4]  = {0};  // ÊÖ±úÊäÈë
+// ä¸¤ç»„ç‹¬ç«‹æ•°æ®
+CAP_Data_t Motor_Data[4] = {0};  // ç”µæœºè½¬é€Ÿ
+CAP_Data_t Hand_Data[4]  = {0};  // æ‰‹æŸ„è¾“å…¥
 
 static uint32_t cap_rise[CAP_MAX]   = {0};
 static uint8_t  edge_sta[CAP_MAX]   = {0};
 static uint32_t last_rise[CAP_MAX] = {0};
 
-// Í¨µÀÓ³Éä
+// é€šé“æ˜ å°„
 static const uint32_t ch_tim[CAP_MAX] = {
     TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3, TIM_CHANNEL_4,  // TIM8
     TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3, TIM_CHANNEL_4   // TIM5
 };
 
-// Í³Ò»²¶»ñ´¦Àí
+// ç»Ÿä¸€æ•è·å¤„ç†
 static void CAP_Process(TIM_HandleTypeDef *htim, CAP_CH_E ch)
 {
     uint32_t tim_ch = ch_tim[ch];
     uint32_t val = HAL_TIM_ReadCapturedValue(htim, tim_ch);
     CAP_Data_t *data;
 
-    // Ö¸Ïò¶ÔÓ¦Êı¾İ×é
+    // æŒ‡å‘å¯¹åº”æ•°æ®ç»„
     if(ch < 4) data = &Motor_Data[ch];
     else       data = &Hand_Data[ch - 4];
 
     if(edge_sta[ch] == 0)
     {
-        // ÉÏÉıÑØ£ºËãÖÜÆÚ
+        // ä¸Šå‡æ²¿ï¼šç®—å‘¨æœŸ
         cap_rise[ch] = val;
         if(val >= last_rise[ch])
             data->period_us = val - last_rise[ch];
@@ -41,28 +41,29 @@ static void CAP_Process(TIM_HandleTypeDef *htim, CAP_CH_E ch)
         last_rise[ch] = val;
         edge_sta[ch] = 1;
 
-        // ÇĞ»»ÏÂ½µÑØ
+        // åˆ‡æ¢ä¸‹é™æ²¿
         TIM_RESET_CAPTUREPOLARITY(htim, tim_ch);
         TIM_SET_CAPTUREPOLARITY(htim, tim_ch, TIM_ICPOLARITY_FALLING);
     }
     else
     {
-        // ÏÂ½µÑØ£ºËã¸ßµçÆ½
+        // ä¸‹é™æ²¿ï¼šç®—é«˜ç”µå¹³
         if(val >= cap_rise[ch])
             data->high_us = val - cap_rise[ch];
         else
-            data->high_us = (0xFFFF - cap_rise[ch]) + val;
+        data->high_us = (0xFFFF - cap_rise[ch]) + val;
 
         data->cap_ok = 1;
+        data->last_capture_ms = HAL_GetTick();
         edge_sta[ch] = 0;
 
-        // ÇĞ»ØÉÏÉıÑØ
+        // åˆ‡å›ä¸Šå‡æ²¿
         TIM_RESET_CAPTUREPOLARITY(htim, tim_ch);
         TIM_SET_CAPTUREPOLARITY(htim, tim_ch, TIM_ICPOLARITY_RISING);
     }
 }
 
-// ===================== TIM8 ³õÊ¼»¯£¨µç»ú×ªËÙ£ºPI5/PI6/PI7/PI2£©=====================
+// ===================== TIM8 åˆå§‹åŒ–ï¼ˆç”µæœºè½¬é€Ÿï¼šPI5/PI6/PI7/PI2ï¼‰=====================
 void TIM8_Cap_Init(void)
 {
     TIM_IC_InitTypeDef ic_conf = {0};
@@ -88,7 +89,7 @@ void TIM8_Cap_Init(void)
     HAL_TIM_IC_Start_IT(&htim8, TIM_CHANNEL_4);
 }
 
-// ===================== TIM5 ³õÊ¼»¯£¨ÊÖ±úÊäÈë£ºPH10/PH11/PH12/PI0£©=====================
+// ===================== TIM5 åˆå§‹åŒ–ï¼ˆæ‰‹æŸ„è¾“å…¥ï¼šPH10/PH11/PH12/PI0ï¼‰=====================
 void TIM5_Cap_Init(void)
 {
     TIM_IC_InitTypeDef ic_conf = {0};
@@ -114,7 +115,7 @@ void TIM5_Cap_Init(void)
     HAL_TIM_IC_Start_IT(&htim5, TIM_CHANNEL_4);
 }
 
-// ===================== GPIO + Ê±ÖÓ + ÖĞ¶Ï =====================
+// ===================== GPIO + æ—¶é’Ÿ + ä¸­æ–­ =====================
 void HAL_TIM_IC_MspInit(TIM_HandleTypeDef *htim)
 {
     GPIO_InitTypeDef gpio_conf = {0};
@@ -159,11 +160,11 @@ void HAL_TIM_IC_MspInit(TIM_HandleTypeDef *htim)
     }
 }
 
-// ===================== ÖĞ¶Ï·şÎñº¯Êı =====================
+// ===================== ä¸­æ–­æœåŠ¡å‡½æ•° =====================
 void TIM8_CC_IRQHandler(void) { HAL_TIM_IRQHandler(&htim8); }
 void TIM5_IRQHandler(void)    { HAL_TIM_IRQHandler(&htim5); }
 
-// ===================== ²¶»ñ»Øµ÷ =====================
+// ===================== æ•è·å›è°ƒ =====================
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
     if(htim->Instance == TIM8)
@@ -183,12 +184,12 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
     }
 }
 
-// ===================== Í³Ò»³õÊ¼»¯ =====================
+// ===================== ç»Ÿä¸€åˆå§‹åŒ– =====================
 void PWM_CAP_Init_All(void)
 {
     TIM8_Cap_Init();
     TIM5_Cap_Init();
 }
 
-// Òç³öÖĞ¶Ï
+// æº¢å‡ºä¸­æ–­
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){} 
