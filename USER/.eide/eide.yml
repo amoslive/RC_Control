@@ -1,0 +1,202 @@
+version: "4.1"
+name: PWM
+type: ARM
+deviceName: null
+packDir: null
+srcDirs: []
+virtualFolder:
+  name: <virtual_root>
+  files: []
+  folders:
+    - name: USER
+      files:
+        - path: main.c
+        - path: stm32f4xx_it.c
+        - path: system_stm32f4xx.c
+      folders: []
+    - name: CORE
+      files:
+        - path: ../CORE/core_cm4.h
+        - path: ../CORE/cmsis_armcc.h
+        - path: ../CORE/core_cmFunc.h
+        - path: ../CORE/core_cmInstr.h
+        - path: ../CORE/core_cmSimd.h
+        - path: ../CORE/startup_stm32f427xx.s
+      folders: []
+    - name: HALLIB
+      files:
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr_ex.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_usart.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma_ex.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c
+      folders: []
+    - name: SYSTEM
+      files:
+        - path: ../SYSTEM/delay/delay.c
+        - path: ../SYSTEM/sys/sys.c
+        - path: ../SYSTEM/usart/usart.c
+      folders: []
+    - name: HARDWARE
+      files:
+        - path: ../HARDWARE/LED/led.c
+        - path: ../HARDWARE/KEY/key.c
+        - path: ../HARDWARE/TIMER/timer.c
+        - path: ../HARDWARE/miniPC_USART/protocol.c
+        - path: ../HARDWARE/TIMER/pwm_capture.c
+        - path: ../HARDWARE/TIMER/pwm_capture.h
+      folders: []
+    - name: README
+      files:
+        - path: ../readme.txt
+      folders: []
+dependenceList: []
+outDir: build
+miscInfo:
+  uid: 4f3c3e5dd77d01c279b056c1e125a4a5
+targets:
+  PWM:
+    cppPreprocessAttrs:
+      defineList:
+        - USE_HAL_DRIVER
+        - STM32F427xx
+      incList:
+        - ../../../../../../../../../Keil_v5/ARM/PACK/Keil/STM32F4xx_DFP/2.17.1/Drivers/CMSIS/Device/ST/STM32F4xx/Include
+        - ../CORE
+        - ../OBJ
+        - .
+        - ../HALLIB/STM32F4xx_HAL_Driver/Inc
+        - ../SYSTEM/delay
+        - ../SYSTEM/sys
+        - ../SYSTEM/usart
+        - ../HARDWARE/LED
+        - ../HARDWARE/KEY
+        - ../HARDWARE/TIMER
+        - ../HARDWARE/miniPC_USART
+      libList: []
+    excludeList: []
+    settings:
+      debugger: cortex-debug
+    toolchain: AC5
+    toolchainConfigMap:
+      AC5:
+        archExtensions: ""
+        cpuType: Cortex-M4
+        floatingPointHardware: single
+        options:
+          version: 4
+          afterBuildTasks: []
+          asm-compiler:
+            defines: []
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            CXX_FLAGS: --diag_suppress=1 --diag_suppress=1295
+            C_FLAGS: --diag_suppress=1 --diag_suppress=1295
+            c99-mode: true
+            one-elf-section-per-function: true
+            optimization: level-2
+            warnings: all-warnings
+          global:
+            output-debug-info: enable
+            use-microLIB: false
+          linker:
+            $outputTaskExcludes:
+              - .bin
+            output-format: elf
+            ro-base: "0x08000000"
+            rw-base: "0x20000000"
+            xo-base: ""
+        scatterFilePath: ""
+        storageLayout:
+          RAM:
+            - id: 1
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 2
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 3
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 1
+              isChecked: true
+              mem:
+                size: "0x30000"
+                startAddr: "0x20000000"
+              noInit: false
+              tag: IRAM
+            - id: 2
+              isChecked: false
+              mem:
+                size: "0x10000"
+                startAddr: "0x10000000"
+              noInit: false
+              tag: IRAM
+          ROM:
+            - id: 1
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 2
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 3
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 1
+              isChecked: true
+              isStartup: true
+              mem:
+                size: "0x200000"
+                startAddr: "0x8000000"
+              tag: IROM
+            - id: 2
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: IROM
+        useCustomScatterFile: false
+    uploadConfigMap:
+      JLink:
+        baseAddr: ""
+        bin: ""
+        cpuInfo:
+          cpuName: "null"
+          vendor: "null"
+        otherCmds: ""
+        proType: 1
+        speed: 8000
+    uploader: JLink

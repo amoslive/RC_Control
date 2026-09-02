@@ -13,41 +13,55 @@ uint32_t duty_speed[4];
 uint16_t Duty_Steer;
 uint16_t Duty_Wheel;
 int i;
-uint16_t PWM_val1_Inital = 495+52;   // ¶æ»úÆğÊ¼Î»ÖÃ
-uint16_t PWM_val2_Inital = 1500;  // µç»úÆğÊ¼Î»ÖÃ
-uint8_t ctrl_mode = 1;   // 0:ÊÖ±úÄ£Ê½(Ä¬ÈÏ)  1:ÉÏÎ»»ú´®¿ÚÄ£Ê½
+uint16_t PWM_val1_Inital = 495+52;   // èˆµæœºèµ·å§‹ä½ç½®
+uint16_t PWM_val2_Inital = 1500;  // ç”µæœºèµ·å§‹ä½ç½®
+uint8_t ctrl_mode = 1;   // 0:æ‰‹æŸ„æ¨¡å¼(é»˜è®¤)  1:ä¸Šä½æœºä¸²å£æ¨¡å¼
 
 int main(void)
 {
     uint16_t target1;
     uint16_t target2;
+    uint32_t led_blink_tick;
     u8 key;
     HAL_Init();
     Stm32_Clock_Init(360,12,2,8);
     delay_init(180);
     uart_init(115200);
     LED_Init();
-    KEY_Scan(0);   // Çå¿ÕÒ»´Î°´¼ü×´Ì¬£¬·ÀÖ¹Îó´¥·¢
+    HAL_GPIO_WritePin(GPIOG,
+        GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 |
+        GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8,
+        GPIO_PIN_SET);
+    led_blink_tick = HAL_GetTick();
+    KEY_Scan(0);   // æ¸…ç©ºä¸€æ¬¡æŒ‰é”®çŠ¶æ€ï¼Œé˜²æ­¢è¯¯è§¦å‘
     KEY_Init();
-    TIM2_PWM_Init(999, 272); // ARR=999£¬PSC=272£¬90MHzÊ±ÖÓ
+    TIM2_PWM_Init(999, 272); // ARR=999ï¼ŒPSC=272ï¼Œ90MHzæ—¶é’Ÿ
     TIM4_PWM_Init(20000 - 1, 90 - 1); 
     protocol_init();
     PWM_CAP_Init_All();
 
     while(1)
     {
+        // çƒ§å½•æŒ‡ç¤ºï¼šPG1~PG8 æ¯ 500 ms ç¿»è½¬ä¸€æ¬¡
+        if((HAL_GetTick() - led_blink_tick) >= 500)
+        {
+            led_blink_tick = HAL_GetTick();
+            HAL_GPIO_TogglePin(GPIOG,
+                GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 |
+                GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8);
+        }
       
- // -------------- ÊÖ±úÆ½»¬Êä³ö(²É¼¯ÊäÈë²¿·Ö) ------------------//
+ // -------------- æ‰‹æŸ„å¹³æ»‘è¾“å‡º(é‡‡é›†è¾“å…¥éƒ¨åˆ†) ------------------//
       target1 = Hand_Data[3].high_us / 2;
-      Duty_Steer = ((target1 - 250) * 660) / 1000 + 165;// ±ê×¼ 0.5~2.5ms ¡ú Êä³ö 165 ~ 825
+      Duty_Steer = ((target1 - 250) * 660) / 1000 + 165;// æ ‡å‡† 0.5~2.5ms â†’ è¾“å‡º 165 ~ 825
 
       target2 = Hand_Data[2].high_us / 2;
       Duty_Wheel = target2;      
       
- // --------------¿ØÖÆÄ£Ê½ÇĞ»»(LEDÈ«ÁÁÊÖ±ú¿ØÖÆÄ£Ê½¡¢È«ÃğÎª´®¿Ú¿ØÖÆÄ£Ê½£©-------//      
+ // --------------æ§åˆ¶æ¨¡å¼åˆ‡æ¢(LEDå…¨äº®æ‰‹æŸ„æ§åˆ¶æ¨¡å¼ã€å…¨ç­ä¸ºä¸²å£æ§åˆ¶æ¨¡å¼ï¼‰-------//      
         key = KEY_Scan(0);  
 
-        if(key == KEY0_PRES)  // PB2 °´Ò»ÏÂÇĞ»»
+        if(key == KEY0_PRES)  // PB2 æŒ‰ä¸€ä¸‹åˆ‡æ¢
         {          
             HAL_GPIO_TogglePin(GPIOG,
             GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 |
@@ -55,24 +69,24 @@ int main(void)
            ctrl_mode = !ctrl_mode;
             if(ctrl_mode == 1)
             {
-              printf("ÒÑÇĞ»»µ½£ºÉÏÎ»»úÄ£Ê½\r\n");
+              printf("å·²åˆ‡æ¢åˆ°ï¼šä¸Šä½æœºæ¨¡å¼\r\n");
             }
             else
             {
-              printf("ÒÑÇĞ»»µ½£ºÊÖ±ú¿ØÖÆÄ£Ê½\r\n");
+              printf("å·²åˆ‡æ¢åˆ°ï¼šæ‰‹æŸ„æ§åˆ¶æ¨¡å¼\r\n");
             }        
         }
      
         if(ctrl_mode == 1)
         {
-            // --------------ÉÏÎ»»úÖ¸Áî(´®¿ÚÍ¨Ñ¶²¿·Ö)-------------------//
+            // --------------ä¸Šä½æœºæŒ‡ä»¤(ä¸²å£é€šè®¯éƒ¨åˆ†)-------------------//
             if(parse_complete_flag == 1)
             {
                 parse_complete_flag = 0;
 
                 for(i=0; i<4; i++)
                 {
-                    if(rx_data.steer_angle[i] < 165) rx_data.steer_angle[i] = PWM_val1_Inital;   // 0.5ms ~ 2.5ms ¶ÔÓ¦ 165 ~ 825
+                    if(rx_data.steer_angle[i] < 165) rx_data.steer_angle[i] = PWM_val1_Inital;   // 0.5ms ~ 2.5ms å¯¹åº” 165 ~ 825
                     if(rx_data.steer_angle[i] > 825) rx_data.steer_angle[i] = PWM_val1_Inital;
 
                     if(rx_data.wheel_speed[i] < 250)  rx_data.wheel_speed[i] = PWM_val2_Inital;
@@ -82,14 +96,14 @@ int main(void)
                 TIM_SetTIM2Compare2(rx_data.steer_angle[3]+52);
                 TIM_SetTIM2Compare3(rx_data.steer_angle[0]+52);
                 TIM_SetTIM2Compare4(rx_data.steer_angle[1]+52);
-//              delay_ms(10);       //ÑÓÊ±ÒÔ·À¿¨¶Ù
-                TIM_SetTIM4Compare1(2*rx_data.wheel_speed[3]); // Êä³öÊÖ±úÍ¨µÀ2²É¼¯Öµ £¨µç»ú1£©
-                TIM_SetTIM4Compare2(2*rx_data.wheel_speed[2]); //£¨µç»ú2£©
-                TIM_SetTIM4Compare3(2*rx_data.wheel_speed[1]); //£¨µç»ú3£©
-                TIM_SetTIM4Compare4(2*rx_data.wheel_speed[0]); //£¨µç»ú4£©
-//              delay_ms(10);  //ÑÓÊ±ÒÔ·À¿¨¶Ù
+//              delay_ms(10);       //å»¶æ—¶ä»¥é˜²å¡é¡¿
+                TIM_SetTIM4Compare1(2*rx_data.wheel_speed[3]); // è¾“å‡ºæ‰‹æŸ„é€šé“2é‡‡é›†å€¼ ï¼ˆç”µæœº1ï¼‰
+                TIM_SetTIM4Compare2(2*rx_data.wheel_speed[2]); //ï¼ˆç”µæœº2ï¼‰
+                TIM_SetTIM4Compare3(2*rx_data.wheel_speed[1]); //ï¼ˆç”µæœº3ï¼‰
+                TIM_SetTIM4Compare4(2*rx_data.wheel_speed[0]); //ï¼ˆç”µæœº4ï¼‰
+//              delay_ms(10);  //å»¶æ—¶ä»¥é˜²å¡é¡¿
 
-                for(i = 0; i < 4; i++) //Ìî³äµç»úÖÜÆÚÖµ
+                for(i = 0; i < 4; i++) //å¡«å……ç”µæœºå‘¨æœŸå€¼
                 {
                    tx_data.wheel_speed[i] = (1000000 / Motor_Data[i].period_us) * 120 / 14;
                    tx_data.steer_angle[i] = ((uint32_t)(rx_data.steer_angle[i] - 165) * 180UL) / 660-90;
@@ -100,24 +114,24 @@ int main(void)
                 
             }
               send_motor_data(&tx_data); 
-              delay_ms(10);  //ÑÓÊ±ÒÔ·À¿¨¶Ù            
+              delay_ms(10);  //å»¶æ—¶ä»¥é˜²å¡é¡¿            
         }
  
        else{ 
 
-        TIM_SetTIM2Compare1(Duty_Steer+52);  //£¨¶æ»ú1£©Êä³öÊÖ±úÍ¨µÀ1²É¼¯Öµ
-        TIM_SetTIM2Compare2(Duty_Steer+52);  //£¨¶æ»ú2£©
-        TIM_SetTIM2Compare3(Duty_Steer+52);  //£¨¶æ»ú3£©
-        TIM_SetTIM2Compare4(Duty_Steer+52);  //£¨¶æ»ú4£©
-        delay_ms(10);  //ÑÓÊ±ÒÔ·À¿¨¶Ù 
-        TIM_SetTIM4Compare1(2*Duty_Wheel); //£¨µç»ú1£©Êä³öÊÖ±úÍ¨µÀ2²É¼¯Öµ 
-        TIM_SetTIM4Compare2(2*Duty_Wheel); //£¨µç»ú2£©
-        TIM_SetTIM4Compare3(2*Duty_Wheel); //£¨µç»ú3£©
-        TIM_SetTIM4Compare4(2*Duty_Wheel); //£¨µç»ú4£©
-        delay_ms(10);  //ÑÓÊ±ÒÔ·À¿¨¶Ù
+        TIM_SetTIM2Compare1(Duty_Steer+52);  //ï¼ˆèˆµæœº1ï¼‰è¾“å‡ºæ‰‹æŸ„é€šé“1é‡‡é›†å€¼
+        TIM_SetTIM2Compare2(Duty_Steer+52);  //ï¼ˆèˆµæœº2ï¼‰
+        TIM_SetTIM2Compare3(Duty_Steer+52);  //ï¼ˆèˆµæœº3ï¼‰
+        TIM_SetTIM2Compare4(Duty_Steer+52);  //ï¼ˆèˆµæœº4ï¼‰
+        delay_ms(10);  //å»¶æ—¶ä»¥é˜²å¡é¡¿ 
+        TIM_SetTIM4Compare1(2*Duty_Wheel); //ï¼ˆç”µæœº1ï¼‰è¾“å‡ºæ‰‹æŸ„é€šé“2é‡‡é›†å€¼ 
+        TIM_SetTIM4Compare2(2*Duty_Wheel); //ï¼ˆç”µæœº2ï¼‰
+        TIM_SetTIM4Compare3(2*Duty_Wheel); //ï¼ˆç”µæœº3ï¼‰
+        TIM_SetTIM4Compare4(2*Duty_Wheel); //ï¼ˆç”µæœº4ï¼‰
+        delay_ms(10);  //å»¶æ—¶ä»¥é˜²å¡é¡¿
          
-        // // -------------- ÊÖ±úÊı¾İ´ò°üÉÏ´«ÉÏÎ»»ú ------------------//
-        for(i = 0; i < 4; i++) //Ìî³äµç»úÖÜÆÚÖµ
+        // // -------------- æ‰‹æŸ„æ•°æ®æ‰“åŒ…ä¸Šä¼ ä¸Šä½æœº ------------------//
+        for(i = 0; i < 4; i++) //å¡«å……ç”µæœºå‘¨æœŸå€¼
         {
           tx_data.wheel_speed[i] = (1000000 / Motor_Data[i].period_us) * 120 / 14;
           tx_data.steer_angle[i] =  ((uint32_t)(Duty_Steer - 165) * 180UL) / 660-90;
@@ -126,6 +140,6 @@ int main(void)
              
        }
         send_motor_data(&tx_data); 
-        delay_ms(10);  //ÑÓÊ±ÒÔ·À¿¨¶Ù         
+        delay_ms(10);  //å»¶æ—¶ä»¥é˜²å¡é¡¿         
     }
 }

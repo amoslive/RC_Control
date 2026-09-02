@@ -1,0 +1,40 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Keil: Build PWM",
+            "type": "process",
+            "command": "powershell.exe",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                "$log = '${workspaceFolder}\\OBJ\\vscode_build.log'; $process = Start-Process -FilePath 'C:\\Keil_v5\\UV4\\UV4.exe' -ArgumentList @('-b', '${workspaceFolder}\\USER\\PWM.uvprojx', '-j0', '-o', $log) -WindowStyle Hidden -Wait -PassThru; if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -Encoding Default }; exit $process.ExitCode"
+            ],
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}/USER"
+                ],
+                "pattern": {
+                    "regexp": "^(.+)\\((\\d+)\\): (error|warning):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "severity": 3,
+                    "message": 4
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        }
+    ]
+}
