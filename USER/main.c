@@ -8,11 +8,22 @@
 
 #define MOTOR_POLE_COUNT        14U
 #define MOTOR_SIGNAL_TIMEOUT_MS 100U
+#define CONTROL_SIGNAL_TIMEOUT_MS 1500U
+#define ESC_NEUTRAL_PULSE_US      1500U
+#define WHEEL_COMMAND_NEUTRAL     (ESC_NEUTRAL_PULSE_US / 2U)
 
 MotorData_t tx_data;
 int i;
 uint16_t PWM_val1_Inital = 495+52;   // 舵机起始位置
-uint16_t PWM_val2_Inital = 1500;  // 电机起始位置
+uint16_t PWM_val2_Inital = WHEEL_COMMAND_NEUTRAL; // protocol value; doubled to 1500 us
+
+static void Motor_OutputNeutral(void)
+{
+    TIM_SetTIM4Compare1(ESC_NEUTRAL_PULSE_US);
+    TIM_SetTIM4Compare2(ESC_NEUTRAL_PULSE_US);
+    TIM_SetTIM4Compare3(ESC_NEUTRAL_PULSE_US);
+    TIM_SetTIM4Compare4(ESC_NEUTRAL_PULSE_US);
+}
 
 static uint16_t Motor_GetSpeedRPM(uint8_t motor_index)
 {
@@ -37,6 +48,8 @@ static uint16_t Motor_GetSpeedRPM(uint8_t motor_index)
 int main(void)
 {
     uint32_t led_blink_tick;
+    uint32_t last_command_tick;
+    uint8_t command_active = 0U;
     HAL_Init();
     Stm32_Clock_Init(360,12,2,8);
     delay_init(180);
@@ -48,7 +61,9 @@ int main(void)
         GPIO_PIN_SET);
     led_blink_tick = HAL_GetTick();
     TIM2_PWM_Init(999, 272); // ARR=999，PSC=272，90MHz时钟
-    TIM4_PWM_Init(20000 - 1, 90 - 1); 
+    TIM4_PWM_Init(20000 - 1, 90 - 1);
+    Motor_OutputNeutral();
+    last_command_tick = HAL_GetTick();
     protocol_init();
     PWM_CAP_Init_All();
 
@@ -67,6 +82,8 @@ int main(void)
         if(parse_complete_flag == 1)
         {
             parse_complete_flag = 0;
+            last_command_tick = HAL_GetTick();
+            command_active = 1U;
 
             for(i=0; i<4; i++)
             {
@@ -85,6 +102,14 @@ int main(void)
             TIM_SetTIM4Compare2(2*rx_data.wheel_speed[2]); // 电机2
             TIM_SetTIM4Compare3(2*rx_data.wheel_speed[1]); // 电机3
             TIM_SetTIM4Compare4(2*rx_data.wheel_speed[0]); // 电机4
+        }
+
+        // Stop all motors if valid serial commands disappear for 1.5 seconds.
+        if((command_active != 0U) &&
+           ((HAL_GetTick() - last_command_tick) > CONTROL_SIGNAL_TIMEOUT_MS))
+        {
+            Motor_OutputNeutral();
+            command_active = 0U;
         }
 
         // -------------- 实时状态上传上位机 ------------------
