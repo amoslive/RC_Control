@@ -2,6 +2,25 @@
 #include "delay.h"
 #include "protocol.h"
 
+/* Recovery diagnostics: do not mix printf text into the binary protocol. */
+volatile uint32_t uart2_rx_error_count = 0;
+volatile uint32_t uart2_rx_last_error = 0;
+volatile uint32_t uart2_rx_recovery_count = 0;
+volatile uint32_t uart2_rx_rearm_fail_count = 0;
+volatile uint32_t uart2_rx_byte_count = 0;
+static volatile uint8_t uart2_rx_recovery_pending = 0;
+static void UART2_RecoverReceive(void);
+
+static void UART2_RequestRecovery(void)
+{
+    /* Never leave RXNE enabled when HAL has no active receive transfer. */
+    __HAL_UART_DISABLE_IT(&UART2_Handler, UART_IT_RXNE);
+    __HAL_UART_DISABLE_IT(&UART2_Handler, UART_IT_PE);
+    __HAL_UART_DISABLE_IT(&UART2_Handler, UART_IT_ERR);
+    uart2_rx_recovery_pending = 1U;
+    uart2_rx_rearm_fail_count++;
+}
+
 ////////////////////////////////////////////////////////////////////////////////// 	 
 //如果使用os,则包括下面的头文件即可.
 #if SYSTEM_SUPPORT_OS
@@ -67,7 +86,10 @@ void uart_init(u32 bound)
 	HAL_UART_Init(&UART2_Handler);					    //HAL_UART_Init()会使能UART2
 	
 	// 【修复】开启 1字节 接收中断
-	HAL_UART_Receive_IT(&UART2_Handler, aRxBuffer, 1); 
+    if (HAL_UART_Receive_IT(&UART2_Handler, aRxBuffer, 1) != HAL_OK)
+    {
+        UART2_RequestRecovery();
+    } 
 }
 
 //UART底层初始化，时钟使能，引脚配置，中断配置
@@ -102,10 +124,14 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if(huart->Instance == USART2)
     {
+        uart2_rx_byte_count++;
         parse_byte(aRxBuffer[0]);   // 解析收到的字节
         
         // 重新开启1字节接收，保证下一个字节能进来
-        HAL_UART_Receive_IT(&UART2_Handler, aRxBuffer, 1);
+        if (HAL_UART_Receive_IT(&UART2_Handler, aRxBuffer, 1) != HAL_OK)
+        {
+            UART2_RequestRecovery();
+        }
       
 //              // 原样回传可以
 //        while((USART2->SR & 0X40) == 0);
@@ -121,10 +147,64 @@ void USART2_IRQHandler(void)
 	OSIntEnter();    
 #endif
 	
-	HAL_UART_IRQHandler(&UART2_Handler);
+    /* Legacy HAL can leave READY + RXNEIE after an error. Drain/rearm
+       before calling it, otherwise RXNE can cause endless IRQ re-entry. */
+    if (((USART2->SR & USART_SR_RXNE) != 0U) &&
+        ((USART2->CR1 & USART_CR1_RXNEIE) != 0U) &&
+        (UART2_Handler.State != HAL_UART_STATE_BUSY_RX) &&
+        (UART2_Handler.State != HAL_UART_STATE_BUSY_TX_RX))
+    {
+        UART2_RecoverReceive();
+    }
+    else
+    {
+        HAL_UART_IRQHandler(&UART2_Handler);
+    }
 	
 #if SYSTEM_SUPPORT_OS	 	//使用OS
 	OSIntExit();  											 
 #endif
 } 
 #endif  
+
+
+/* Called only from USART2 IRQ, or with interrupts masked by uart_rx_service.
+   A faulted/stray byte may be discarded; the frame parser resynchronizes
+   on subsequent complete frames. Existing motor timeout remains unchanged. */
+static void UART2_RecoverReceive(void)
+{
+    __HAL_UART_DISABLE_IT(&UART2_Handler, UART_IT_RXNE);
+    __HAL_UART_DISABLE_IT(&UART2_Handler, UART_IT_PE);
+    __HAL_UART_DISABLE_IT(&UART2_Handler, UART_IT_ERR);
+    __HAL_UART_CLEAR_OREFLAG(&UART2_Handler);
+    UART2_Handler.State = HAL_UART_STATE_READY;
+    uart2_rx_recovery_count++;
+    uart2_rx_recovery_pending = 0U;
+    if (HAL_UART_Receive_IT(&UART2_Handler, aRxBuffer, 1) != HAL_OK)
+    {
+        UART2_RequestRecovery();
+    }
+}
+
+/* This strong callback replaces the legacy HAL's empty weak callback. */
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    if (huart == &UART2_Handler)
+    {
+        uart2_rx_error_count++;
+        uart2_rx_last_error = huart->ErrorCode;
+        UART2_RecoverReceive();
+    }
+}
+
+void uart_rx_service(void)
+{
+    uint32_t saved_primask;
+    if (uart2_rx_recovery_pending == 0U)
+        return;
+    saved_primask = __get_PRIMASK();
+    __disable_irq();
+    if (uart2_rx_recovery_pending != 0U)
+        UART2_RecoverReceive();
+    __set_PRIMASK(saved_primask);
+}

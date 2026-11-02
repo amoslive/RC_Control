@@ -32,8 +32,11 @@ typedef struct
 } CAP_Data_t;
 
 // 两组独立数据
-extern CAP_Data_t Motor_Data[4];  // 电机转速（TIM8 4路）
-extern CAP_Data_t Hand_Data[4];   // 手柄输入（TIM5 4路）
+/* Motor high_us is unused: TIM8 captures rising edges only for RPM. */
+extern volatile CAP_Data_t Motor_Data[4];
+extern volatile CAP_Data_t Hand_Data[4];
+extern volatile uint32_t motor_capture_overrun_count[4];
+uint16_t PWM_CAP_GetMotorSpeedRPM(uint8_t index);
 
 // 初始化全部8路
 void PWM_CAP_Init_All(void);

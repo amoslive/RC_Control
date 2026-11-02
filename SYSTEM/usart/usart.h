@@ -15,5 +15,11 @@ extern UART_HandleTypeDef UART2_Handler;
 extern u8 aRxBuffer[RXBUFFERSIZE];
 
 void uart_init(u32 bound);
+void uart_rx_service(void);
+extern volatile uint32_t uart2_rx_error_count;
+extern volatile uint32_t uart2_rx_last_error;
+extern volatile uint32_t uart2_rx_recovery_count;
+extern volatile uint32_t uart2_rx_rearm_fail_count;
+extern volatile uint32_t uart2_rx_byte_count;
 
 #endif

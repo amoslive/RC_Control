@@ -6,8 +6,6 @@
 #include "protocol.h"
 #include "pwm_capture.h"
 
-#define MOTOR_POLE_COUNT        14U
-#define MOTOR_SIGNAL_TIMEOUT_MS 100U
 #define CONTROL_SIGNAL_TIMEOUT_MS 1500U
 #define ESC_NEUTRAL_PULSE_US      1500U
 #define WHEEL_COMMAND_NEUTRAL     (ESC_NEUTRAL_PULSE_US / 2U)
@@ -23,26 +21,6 @@ static void Motor_OutputNeutral(void)
     TIM_SetTIM4Compare2(ESC_NEUTRAL_PULSE_US);
     TIM_SetTIM4Compare3(ESC_NEUTRAL_PULSE_US);
     TIM_SetTIM4Compare4(ESC_NEUTRAL_PULSE_US);
-}
-
-static uint16_t Motor_GetSpeedRPM(uint8_t motor_index)
-{
-    uint32_t period_us;
-
-    if(motor_index >= 4U)
-        return 0U;
-
-    if((Motor_Data[motor_index].cap_ok == 0U) ||
-       ((HAL_GetTick() - Motor_Data[motor_index].last_capture_ms) > MOTOR_SIGNAL_TIMEOUT_MS))
-        return 0U;
-
-    period_us = Motor_Data[motor_index].period_us;
-    if(period_us == 0U)
-        return 0U;
-
-    // RPM = 频率 * 120 / 磁极数；先合并常数以减少整数截断误差
-    return (uint16_t)((1000000UL * 120UL) /
-                      (period_us * MOTOR_POLE_COUNT));
 }
 
 int main(void)
@@ -69,6 +47,7 @@ int main(void)
 
     while(1)
     {
+        uart_rx_service();
         // 烧录指示：PG1~PG8 每 500 ms 翻转一次
         if((HAL_GetTick() - led_blink_tick) >= 500)
         {
@@ -115,7 +94,7 @@ int main(void)
         // -------------- 实时状态上传上位机 ------------------
         for(i = 0; i < 4; i++)
         {
-            tx_data.wheel_speed[i] = Motor_GetSpeedRPM(i);
+            tx_data.wheel_speed[i] = PWM_CAP_GetMotorSpeedRPM(i);
             tx_data.steer_angle[i] = ((uint32_t)(rx_data.steer_angle[i] - 165) * 180UL) / 660-90;
         }
         send_motor_data(&tx_data);

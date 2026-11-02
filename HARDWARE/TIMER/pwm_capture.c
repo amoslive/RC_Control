@@ -1,12 +1,16 @@
 #include "pwm_capture.h"
+#include "motor_capture_math.h"
 
 // TIM8 + TIM5 两个定时器
 TIM_HandleTypeDef htim8;
 TIM_HandleTypeDef htim5;
 
 // 两组独立数据
-CAP_Data_t Motor_Data[4] = {0};  // 电机转速
-CAP_Data_t Hand_Data[4]  = {0};  // 手柄输入
+volatile CAP_Data_t Motor_Data[4] = {0};  // 电机转速
+volatile CAP_Data_t Hand_Data[4]  = {0};  // 手柄输入
+static volatile MotorCaptureState motor_capture[4] = {0};
+static uint32_t tim8_epoch_us = 0U;
+volatile uint32_t motor_capture_overrun_count[4] = {0};
 
 static uint32_t cap_rise[CAP_MAX]   = {0};
 static uint8_t  edge_sta[CAP_MAX]   = {0};
@@ -23,7 +27,7 @@ static void CAP_Process(TIM_HandleTypeDef *htim, CAP_CH_E ch)
 {
     uint32_t tim_ch = ch_tim[ch];
     uint32_t val = HAL_TIM_ReadCapturedValue(htim, tim_ch);
-    CAP_Data_t *data;
+    volatile CAP_Data_t *data;
 
     // 指向对应数据组
     if(ch < 4) data = &Motor_Data[ch];
@@ -36,7 +40,7 @@ static void CAP_Process(TIM_HandleTypeDef *htim, CAP_CH_E ch)
         if(val >= last_rise[ch])
             data->period_us = val - last_rise[ch];
         else
-            data->period_us = (0xFFFF - last_rise[ch]) + val;
+            data->period_us = (0x10000UL - last_rise[ch]) + val;
 
         last_rise[ch] = val;
         edge_sta[ch] = 1;
@@ -51,7 +55,7 @@ static void CAP_Process(TIM_HandleTypeDef *htim, CAP_CH_E ch)
         if(val >= cap_rise[ch])
             data->high_us = val - cap_rise[ch];
         else
-        data->high_us = (0xFFFF - cap_rise[ch]) + val;
+        data->high_us = (0x10000UL - cap_rise[ch]) + val;
 
         data->cap_ok = 1;
         data->last_capture_ms = HAL_GetTick();
@@ -83,6 +87,10 @@ void TIM8_Cap_Init(void)
     HAL_TIM_IC_ConfigChannel(&htim8, &ic_conf, TIM_CHANNEL_3);
     HAL_TIM_IC_ConfigChannel(&htim8, &ic_conf, TIM_CHANNEL_4);
 
+    /* Keep 1 us resolution; extend the 16-bit counter in the update IRQ. */
+    tim8_epoch_us = 0U;
+    __HAL_TIM_CLEAR_FLAG(&htim8, TIM_FLAG_UPDATE);
+    __HAL_TIM_ENABLE_IT(&htim8, TIM_IT_UPDATE);
     HAL_TIM_IC_Start_IT(&htim8, TIM_CHANNEL_1);
     HAL_TIM_IC_Start_IT(&htim8, TIM_CHANNEL_2);
     HAL_TIM_IC_Start_IT(&htim8, TIM_CHANNEL_3);
@@ -120,9 +128,15 @@ void HAL_TIM_IC_MspInit(TIM_HandleTypeDef *htim)
 {
     GPIO_InitTypeDef gpio_conf = {0};
 
-    if(htim->Instance == TIM8)
+    if (htim->Instance == TIM8)
     {
+        HAL_NVIC_DisableIRQ(TIM8_CC_IRQn);
+        HAL_NVIC_DisableIRQ(TIM8_UP_TIM13_IRQn);
         __HAL_RCC_TIM8_CLK_ENABLE();
+        __HAL_RCC_TIM8_FORCE_RESET();
+        __HAL_RCC_TIM8_RELEASE_RESET();
+        HAL_NVIC_ClearPendingIRQ(TIM8_CC_IRQn);
+        HAL_NVIC_ClearPendingIRQ(TIM8_UP_TIM13_IRQn);
         __HAL_RCC_GPIOI_CLK_ENABLE();
 
         gpio_conf.Pin = GPIO_PIN_2|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7;
@@ -134,8 +148,10 @@ void HAL_TIM_IC_MspInit(TIM_HandleTypeDef *htim)
 
         HAL_NVIC_SetPriority(TIM8_CC_IRQn, 1, 0);
         HAL_NVIC_EnableIRQ(TIM8_CC_IRQn);
+        /* Same preemption priority: neither handler may interrupt the other. */
+        HAL_NVIC_SetPriority(TIM8_UP_TIM13_IRQn, 1, 0);
+        HAL_NVIC_EnableIRQ(TIM8_UP_TIM13_IRQn);
     }
-
     if(htim->Instance == TIM5)
     {
         __HAL_RCC_TIM5_CLK_ENABLE();
@@ -161,18 +177,91 @@ void HAL_TIM_IC_MspInit(TIM_HandleTypeDef *htim)
 }
 
 // ===================== 中断服务函数 =====================
-void TIM8_CC_IRQHandler(void) { HAL_TIM_IRQHandler(&htim8); }
-void TIM5_IRQHandler(void)    { HAL_TIM_IRQHandler(&htim5); }
+/* Use the existing HAL dispatcher to clear CC interrupt flags explicitly.
+   Both TIM8 vectors share the same preemption priority. */
+static void TIM8_ClearOvercaptures(void)
+{
+    uint8_t i;
+    uint32_t status = TIM8->SR;
+    for (i = 0U; i < 4U; ++i)
+    {
+        uint32_t flag = TIM_SR_CC1OF << i;
+        if ((status & flag) != 0U)
+        {
+            __HAL_TIM_CLEAR_FLAG(&htim8, flag);
+            motor_capture_overrun_count[i]++;
+            motor_capture[i].primed = 0U;
+            motor_capture[i].valid = 0U;
+            Motor_Data[i].cap_ok = 0U;
+        }
+    }
+}
+
+static void TIM8_CaptureIRQ(void)
+{
+    /* Clear OF even when CCIF is no longer set; otherwise an overcapture
+       interrupt source can remain asserted without invoking a callback. */
+    TIM8_ClearOvercaptures();
+    HAL_TIM_IRQHandler(&htim8);
+    TIM8_ClearOvercaptures();
+}
+
+void TIM8_CC_IRQHandler(void) { TIM8_CaptureIRQ(); }
+void TIM8_UP_TIM13_IRQHandler(void) { TIM8_CaptureIRQ(); }
+void TIM5_IRQHandler(void) { HAL_TIM_IRQHandler(&htim5); }
+
+static void Motor_ProcessCapture(uint8_t index, uint32_t channel)
+{
+    uint32_t capture = HAL_TIM_ReadCapturedValue(&htim8, channel);
+    uint32_t status = TIM8->SR;
+    uint32_t counter = TIM8->CNT;
+    uint32_t timestamp;
+    uint32_t now_ms;
+    if (((status & TIM_SR_UIF) == 0U) && ((TIM8->SR & TIM_SR_UIF) != 0U))
+    {
+        /* Overflow occurred between SR and CNT reads: resample CNT. */
+        status |= TIM_SR_UIF;
+        counter = TIM8->CNT;
+    }
+    if ((status & (TIM_SR_CC1OF << index)) != 0U)
+    {
+        TIM8_ClearOvercaptures();
+        return;
+    }
+    timestamp = MotorCapture_Timestamp(tim8_epoch_us, capture, counter,
+                                       (status & TIM_SR_UIF) != 0U);
+    now_ms = HAL_GetTick();
+    MotorCapture_Update(&motor_capture[index], timestamp, now_ms);
+    Motor_Data[index].period_us = motor_capture[index].period_us;
+    Motor_Data[index].last_capture_ms = motor_capture[index].last_edge_ms;
+    Motor_Data[index].cap_ok = motor_capture[index].valid;
+}
+
+uint16_t PWM_CAP_GetMotorSpeedRPM(uint8_t index)
+{
+    MotorCaptureState snapshot;
+    uint32_t now_ms;
+    uint32_t saved_primask;
+    if (index >= 4U)
+        return 0U;
+    /* One coherent snapshot: an edge cannot update half of the fields. */
+    saved_primask = __get_PRIMASK();
+    __disable_irq();
+    snapshot = motor_capture[index];
+    now_ms = HAL_GetTick();
+    __set_PRIMASK(saved_primask);
+    return MotorCapture_RPM(&snapshot, now_ms);
+}
 
 // ===================== 捕获回调 =====================
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
     if(htim->Instance == TIM8)
     {
-        if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) CAP_Process(htim, MOTOR_CH0);
-        if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2) CAP_Process(htim, MOTOR_CH1);
-        if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3) CAP_Process(htim, MOTOR_CH2);
-        if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4) CAP_Process(htim, MOTOR_CH3);
+        if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) Motor_ProcessCapture(0U, TIM_CHANNEL_1);
+        if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2) Motor_ProcessCapture(1U, TIM_CHANNEL_2);
+        if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3) Motor_ProcessCapture(2U, TIM_CHANNEL_3);
+        if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4) Motor_ProcessCapture(3U, TIM_CHANNEL_4);
     }
 
     if(htim->Instance == TIM5)
@@ -192,4 +281,8 @@ void PWM_CAP_Init_All(void)
 }
 
 // 溢出中断
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){} 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM8)
+        tim8_epoch_us += 65536UL;
+}
